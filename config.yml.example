@@ -1,0 +1,30 @@
+# App configuration
+# Copy to config.yml and fill in your values:
+#   cp config.yml.example config.yml
+
+mode: dev    # dev | prod
+
+# Cloud inference endpoint — set via Lock button in dev mode
+cloud_url: ""
+cloud_api_key: ""
+
+# Anaconda Desktop API
+desktop_api_port: 8001
+local_server_port: 8080
+
+# ML Pipeline (Metaflow)
+pipeline:
+  mode: local              # local | kubernetes
+  flows_dir: flows
+  data_path: data/creditcard.csv
+  auto_load_model: true
+  scoring:
+    block: 0.8
+    review: 0.5
+    llm_trigger: 0.3
+
+# Live streaming defaults
+streaming:
+  total_transactions: 200
+  batch_size: 5
+  batch_delay: 2

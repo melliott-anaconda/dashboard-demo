@@ -1,0 +1,10 @@
+streamlit>=1.37.0
+pandas
+pyyaml
+numpy
+plotly
+requests
+scikit-learn
+metaflow
+openai
+outerbounds

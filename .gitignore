@@ -1,0 +1,28 @@
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+*.egg
+dist/
+build/
+
+# Data (large Kaggle dataset — download separately)
+data/creditcard.csv
+
+# Metaflow local datastore (symlink to fraud-detection-ob)
+.metaflow/
+
+# Outerbounds deploy state
+.ob_apps/
+.run_ids/
+
+# Config contains API keys — use config.yml.example as template
+config.yml
+
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+.DS_Store
