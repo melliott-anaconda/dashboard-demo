@@ -106,7 +106,7 @@ if [[ "${SKIP_TRAINING}" == "false" ]]; then
     else
         DATA_FLOW="${FLOWS_DIR}/data_prep_flow.py"
         TRAIN_FLOW="${FLOWS_DIR}/training_flow.py"
-        K8S_FLAG="--with kubernetes"
+        K8S_FLAG="--environment=fast-bakery --with kubernetes"
         echo "============================================"
         echo " Phase 1: Training (KUBERNETES — promote)"
         echo "============================================"
