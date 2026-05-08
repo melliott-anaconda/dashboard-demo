@@ -16,7 +16,11 @@ set -euo pipefail
 #   - conda env with scikit-learn, metaflow, streamlit
 # ============================================================================
 
-APP_NAME="credit-fraud-melliott"
+APP_NAME_BASE="credit-fraud"
+USERNAME="${USER:-$(whoami)}"
+# Strip domain if it's an email-style username, keep short form
+USERNAME=$(echo "${USERNAME}" | sed 's/@.*//' | tr '.' '-' | tr '[:upper:]' '[:lower:]')
+APP_NAME="${APP_NAME_BASE}-${USERNAME}"
 PORT=8501
 PYTHON_VERSION="3.12"
 CONFIG="config.yml"
