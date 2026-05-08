@@ -2,18 +2,28 @@
 set -euo pipefail
 
 # ============================================================================
-# deploy.sh — Train model + deploy dashboard to Outerbounds
+# deploy.sh — Promote best model + deploy dashboard to Outerbounds
 #
 # Usage:
-#   ./deploy.sh                  # full pipeline: train on K8s → deploy
+#   ./deploy.sh                  # promote best local config to K8s → deploy
 #   ./deploy.sh --deploy-only    # skip training, deploy with latest model
 #   ./deploy.sh --train-only     # run pipeline on K8s, don't deploy app
-#   ./deploy.sh --local-train    # train locally, then deploy app
+#   ./deploy.sh --local-train    # full grid search locally, then deploy app
+#
+# Training behaviour:
+#   By default, the script reads the best hyperparameters from your latest
+#   local FraudTrainingFlow run and promotes that SINGLE config to K8s.
+#   No grid search is re-run — the same model spec trained locally is
+#   reproduced on production infrastructure. If no local run exists,
+#   falls back to full grid search on K8s.
+#
+#   --local-train always runs the full grid search locally.
 #
 # Prerequisites:
 #   - outerbounds CLI installed and authenticated
 #   - metaflow configured for Outerbounds (metadata service + S3 datastore)
 #   - conda env with scikit-learn, metaflow, streamlit
+#   - At least one local FraudTrainingFlow run (for promote mode)
 # ============================================================================
 
 APP_NAME_BASE="credit-fraud"
@@ -27,6 +37,10 @@ CONFIG="config.yml"
 CONFIG_BAK="config.yml.bak"
 FLOWS_DIR="flows"
 RUN_ID_DIR=".run_ids"
+
+# Outerbounds perimeter key — required for the deployed app to access
+# Metaflow metadata service and load trained model artifacts.
+# Set via env var or edit this default.
 OBP_PERIMETER_KEY="${OBP_PERIMETER_KEY:-}"
 
 # Parse flags
@@ -49,6 +63,7 @@ echo "============================================"
 echo ""
 echo " Training:  $(${SKIP_TRAINING} && echo 'SKIP' || (${TRAIN_LOCAL} && echo 'LOCAL' || echo 'KUBERNETES'))"
 echo " Deploy:    $(${SKIP_DEPLOY} && echo 'SKIP' || echo 'YES')"
+echo " App name:  ${APP_NAME}"
 echo ""
 
 # ----------------------------------------------------------------------------
@@ -91,9 +106,9 @@ if [[ "${SKIP_TRAINING}" == "false" ]]; then
     else
         DATA_FLOW="${FLOWS_DIR}/data_prep_flow.py"
         TRAIN_FLOW="${FLOWS_DIR}/training_flow.py"
-        K8S_FLAG="--environment=fast-bakery --with kubernetes"
+        K8S_FLAG="--with kubernetes"
         echo "============================================"
-        echo " Phase 1: Training (KUBERNETES)"
+        echo " Phase 1: Training (KUBERNETES — promote)"
         echo "============================================"
     fi
     echo ""
@@ -113,13 +128,60 @@ if [[ "${SKIP_TRAINING}" == "false" ]]; then
     echo ""
 
     # --- Step 1b: Training ---
-    echo "--- Step 2/2: Model Training (4-config hyperparameter search) ---"
-    echo "Running: python ${TRAIN_FLOW} ${K8S_FLAG} run --data_run_id ${DATA_RUN_ID}"
+    # Extract best hyperparameters from the latest LOCAL training run.
+    # The deploy promotes this exact config to K8s — no grid search,
+    # same model specification, production infrastructure.
+    # Extract best hyperparameters from the latest LOCAL training run.
+    # The deploy promotes this exact config to K8s — no grid search,
+    # same model specification, production infrastructure.
+    PROMOTE_HPARAMS=""
+    if [[ "${TRAIN_LOCAL}" == "false" ]]; then
+        echo "--- Extracting best hyperparameters from latest local training run ---"
+        PROMOTE_HPARAMS=$(python3 << 'PYEOF'
+import json, sys
+try:
+    from metaflow import Flow
+    run = Flow("FraudTrainingFlow").latest_successful_run
+    hp = run["end"].task.data.best_hparams
+    m = run["end"].task.data.best_metrics
+    print(json.dumps(hp))
+    print(f"   Promoting from local run {run.id}: {hp}", file=sys.stderr)
+    print(f"   Local metrics: F1={m['f1']:.4f}  AUC={m['auc_roc']:.4f}", file=sys.stderr)
+except Exception as e:
+    print(f"   No local training run found: {e}", file=sys.stderr)
+PYEOF
+        ) || true
+
+        if [[ -n "${PROMOTE_HPARAMS}" ]]; then
+            echo "--- Step 2/2: Model Training (promoting best config) ---"
+            echo "Promoting: ${PROMOTE_HPARAMS}"
+            echo ""
+        else
+            echo "--- Step 2/2: Model Training (full grid search — no local run found) ---"
+            echo ""
+        fi
+    else
+        echo "--- Step 2/2: Model Training (full grid search — local mode) ---"
+        echo ""
+    fi
+
+    TRAIN_CMD="python ${TRAIN_FLOW} ${K8S_FLAG} run --data_run_id ${DATA_RUN_ID}"
+    if [[ -n "${PROMOTE_HPARAMS}" ]]; then
+        TRAIN_CMD="${TRAIN_CMD} --promote_hparams '${PROMOTE_HPARAMS}'"
+    fi
+    echo "Running: ${TRAIN_CMD}"
     echo ""
 
-    python "${TRAIN_FLOW}" ${K8S_FLAG} run \
-        --data_run_id "${DATA_RUN_ID}" \
-        --run-id-file "${RUN_ID_DIR}/training_run_id"
+    if [[ -n "${PROMOTE_HPARAMS}" ]]; then
+        python "${TRAIN_FLOW}" ${K8S_FLAG} run \
+            --data_run_id "${DATA_RUN_ID}" \
+            --promote_hparams "${PROMOTE_HPARAMS}" \
+            --run-id-file "${RUN_ID_DIR}/training_run_id"
+    else
+        python "${TRAIN_FLOW}" ${K8S_FLAG} run \
+            --data_run_id "${DATA_RUN_ID}" \
+            --run-id-file "${RUN_ID_DIR}/training_run_id"
+    fi
 
     TRAINING_RUN_ID=$(cat "${RUN_ID_DIR}/training_run_id")
     echo ""
@@ -210,11 +272,6 @@ prod = {
             'llm_trigger': 0.3,
         },
     },
-    'streaming': {
-        'total_transactions': 200,
-        'batch_size': 20,
-        'batch_delay': 0
-    }
 }
 with open('${CONFIG}', 'w') as f:
     yaml.dump(prod, f, default_flow_style=False, sort_keys=False)
@@ -235,7 +292,6 @@ requests
 scikit-learn
 metaflow
 openai
-outerbounds
 EOF
 
 echo "Created requirements.txt"

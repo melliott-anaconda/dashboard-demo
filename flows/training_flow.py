@@ -1,5 +1,13 @@
 """
 Fraud Detection - Training Flow (Kubernetes-compatible)
+
+Usage:
+  Full grid search:
+    python flows/training_flow.py --with kubernetes run --data_run_id <id>
+
+  Promote a specific config (skip grid search):
+    python flows/training_flow.py --with kubernetes run --data_run_id <id> \
+        --promote_hparams '{"n_estimators": 200, "max_depth": 15}'
 """
 from metaflow import FlowSpec, step, Parameter, card, resources, current, pypi_base
 
@@ -8,9 +16,16 @@ DEPS = {"pandas": "2.3.0", "numpy": "2.2.6", "scikit-learn": "1.7.2"}
 @pypi_base(python='3.12', packages=DEPS)
 class FraudTrainingFlow(FlowSpec):
     data_run_id = Parameter("data_run_id", help="Run ID from FraudDataPrepFlow", required=True)
+    promote_hparams = Parameter(
+        "promote_hparams",
+        help='JSON string of hyperparameters to promote (skips grid search). '
+             'Example: \'{"n_estimators": 200, "max_depth": 15}\'',
+        default=None,
+    )
 
     @step
     def start(self):
+        import json
         from metaflow import Flow
         run = Flow("FraudDataPrepFlow")[self.data_run_id]
         end = run["end"].task
@@ -23,12 +38,20 @@ class FraudTrainingFlow(FlowSpec):
         self.amt_train = end.data.amt_train
         self.amt_test = end.data.amt_test
         print(f"Loaded data from run {self.data_run_id}: Train {len(self.X_train):,}, Test {len(self.X_test):,}")
-        self.hp_grid = [
-            {"n_estimators": 100, "max_depth": 12},
-            {"n_estimators": 200, "max_depth": 10},
-            {"n_estimators": 200, "max_depth": 15},
-            {"n_estimators": 300, "max_depth": 12},
-        ]
+
+        if self.promote_hparams:
+            promoted = json.loads(self.promote_hparams)
+            self.hp_grid = [promoted]
+            print(f"PROMOTE MODE: training single config {promoted}")
+        else:
+            self.hp_grid = [
+                {"n_estimators": 100, "max_depth": 12},
+                {"n_estimators": 200, "max_depth": 10},
+                {"n_estimators": 200, "max_depth": 15},
+                {"n_estimators": 300, "max_depth": 12},
+            ]
+            print(f"GRID SEARCH: {len(self.hp_grid)} configurations")
+
         self.next(self.train, foreach="hp_grid")
 
     @resources(cpu=2, memory=4096)
@@ -54,7 +77,7 @@ class FraudTrainingFlow(FlowSpec):
         self.best_model = best.rf_model
         self.best_metrics = best.metrics
         self.best_hparams = best.hparams
-        self.model_config = {"llm_threshold":0.3,"xgb_weight":0.6,"llm_weight":0.4,"block_threshold":0.8,"review_threshold":0.5}
+        self.model_config = {"llm_threshold":0.3,"rf_weight":0.6,"llm_weight":0.4,"block_threshold":0.8,"review_threshold":0.5}
         print(f"\n{'='*70}\n  HYPERPARAMETER SEARCH RESULTS\n{'='*70}")
         for inp in inputs:
             m = " <-- BEST" if inp.hparams == best.hparams else ""
