@@ -8,7 +8,8 @@ mode: dev    # dev | prod
 cloud_url: ""
 cloud_api_key: ""
 
-# Anaconda Desktop API
+# Anaconda Desktop API (grab API key from Desktop app)
+desktop_api_key: "" 
 desktop_api_port: 8001
 local_server_port: 8080
 

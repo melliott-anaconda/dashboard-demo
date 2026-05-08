@@ -94,12 +94,12 @@ st.set_page_config(
 # ============================================================
 # Anaconda Desktop API configuration
 # ============================================================
-DESKTOP_API_BASE = "http://localhost:8001"
-DESKTOP_API_KEY = "94397214-521a-4b59-8b58-f0deedd7c47b"
+DESKTOP_API_BASE = f"http://localhost:{_config.get('desktop_api_port', 8001)}"
+DESKTOP_API_KEY = _config.get("desktop_api_key", "")
 TARGET_MODEL_SEARCH_TERMS = ["llama-3.1-8b-instruct", "llama-3.1-8b", "meta-llama-3.1-8b"]
 TARGET_MODEL_FILENAME = "Meta-Llama-3.1-8B-Instruct-q4_k_m"
 TARGET_QUANTIZATION = "q4_k_m"
-LOCAL_SERVER_PORT = 8080
+LOCAL_SERVER_PORT = _config.get("local_server_port", 8080)
 
 DESKTOP_HEADERS = {
     "Authorization": f"Bearer {DESKTOP_API_KEY}",
