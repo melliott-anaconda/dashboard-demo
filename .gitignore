@@ -26,3 +26,6 @@ config.yml
 *.swp
 *.swo
 .DS_Store
+
+anaconda_projects
+.ipynb_checkpoints

@@ -4,6 +4,7 @@ channels:
   - https://conda.anaconda.org/conda-forge
 dependencies:
   - python=3.12
+  - ipykernel
   - streamlit>=1.37.0
   - pandas
   - pyyaml
@@ -11,8 +12,8 @@ dependencies:
   - plotly
   - requests
   - scikit-learn
-  - pip:
-    - openai
-    - outerbounds
-    - metaflow
+  - openai
+  - outerbounds
+  - metaflow
+  - matplotlib
  

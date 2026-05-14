@@ -289,9 +289,10 @@ pyyaml
 numpy
 plotly
 requests
-scikit-learn
+scikit-learn>=1.8.0
 metaflow
 openai
+outerbounds
 EOF
 
 echo "Created requirements.txt"
